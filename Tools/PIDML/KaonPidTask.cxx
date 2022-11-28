@@ -112,7 +112,7 @@ struct KaonPidTask {
 
     for (auto& [pos, neg] : combinations(soa::CombinationsFullIndexPolicy(groupPositive, groupNegative))) {
       if (!(pidModel.get()->applyModelBoolean(pos)) || !(pidModel.get()->applyModelBoolean(neg))) {
-       continue;
+        continue;
       }
 
       TLorentzVector part1Vec;
