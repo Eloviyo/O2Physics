@@ -116,12 +116,13 @@ struct PidONNXModel {
       modelDir += "_TRD";
     }
 
-    modelFile = "simple_model_";
+    modelFile = "simple_model_kaon";
+    /*modelFile = "simple_model_";
     if (pid < 0) {
       modelFile += "0" + std::to_string(-pid);
     } else {
       modelFile += std::to_string(pid);
-    }
+    }*/
     modelFile += ext;
     modelPath = modelDir + "/" + modelFile;
   }

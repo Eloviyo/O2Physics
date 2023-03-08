@@ -9,8 +9,8 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// This task produces invariant mass vs. momentum and dEdX in TPC vs. momentum
-/// for Kaons using ML PID from the PID ML ONNX Model.
+/// This task produces invariant mass vs. momentum, dEdX in TPC vs. momentum and TOF beta vs. momentum plots
+/// for Kaons using ML PID from the PID ML ONNX Model and standard PID method.
 
 #include <cmath>
 #include <memory>
@@ -37,7 +37,8 @@ using MyCollisions = soa::Join<aod::Collisions,
                                aod::EvSels,
                                aod::Mults>;
 using MyTracks = soa::Join<aod::FullTracks, aod::TracksExtra, aod::pidTOFbeta,
-                           aod::TOFSignal, aod::TracksDCA>;
+                           aod::pidTPCKa, aod::pidTOFKa, aod::TOFSignal, 
+			   aod::TracksDCA>;
 using MyCollision = MyCollisions::iterator;
 using MyTrack = MyTracks::iterator;
 } // namespace o2::aod
@@ -49,7 +50,7 @@ struct KaonPidTask {
   Configurable<float> cfgZvtxCut{"cfgZvtxCut", 10, "Z vtx cut"};
   Configurable<float> cfgEtaCut{"cfgEtaCut", 0.8, "Pseudorapidity cut"};
   Configurable<float> cfgMaxPtCut{"cfgMaxPtCut", 3.0, "Max Pt cut"};
-  Configurable<float> cfgMinPtCut{"cfgMinPtCut", 0.5, "Min Pt cut"};
+  Configurable<float> cfgMinPtCut{"cfgMinPtCut", 0.2, "Min Pt cut"};
   Configurable<float> cfgMinNSigmaTPCCut{"cfgMinNSigmaTPCCut", 3., "N-sigma TPC cut"};
   Configurable<float> cfgChargeCut{"cfgChargeCut", 0., "N-sigma TPC cut"};
   Configurable<std::string> cfgPathLocal{"local-path", ".", "base path to the local directory with ONNX models"};
@@ -60,6 +61,7 @@ struct KaonPidTask {
   Configurable<uint32_t> cfgDetector{"detector", kTPCTOFTRD, "What detectors to use: 0: TPC only, 1: TPC + TOF, 2: TPC + TOF + TRD"};
   Configurable<uint64_t> cfgTimestamp{"timestamp", 0, "Fixed timestamp"};
   Configurable<bool> cfgUseCCDB{"useCCDB", false, "Whether to autofetch ML model from CCDB. If false, local file will be used."};
+  Configurable<bool> cfgUseMLPID{"useMLPID", true, "Whether to use ML ONNX model for PID or the standard method"};
 
   o2::ccdb::CcdbApi ccdbApi;
 
@@ -82,13 +84,57 @@ struct KaonPidTask {
     if (cfgUseCCDB) {
       ccdbApi.init(cfgCCDBURL); // Initializes ccdbApi when cfgUseCCDB is set to 'true'
     }
-    pidModel = std::make_shared<PidONNXModel>(cfgPathLocal.value, cfgPathCCDB.value, cfgUseCCDB.value, ccdbApi, cfgTimestamp.value, cfgPid.value, static_cast<PidMLDetector>(cfgDetector.value), cfgCertainty.value);
+    if (cfgUseMLPID) {
+      pidModel = std::make_shared<PidONNXModel>(cfgPathLocal.value, cfgPathCCDB.value, cfgUseCCDB.value, ccdbApi, cfgTimestamp.value, cfgPid.value, static_cast<PidMLDetector>(cfgDetector.value), cfgCertainty.value);
+    }
 
+    histos.add("hEta", ";#eta", kTH1F, {{100, -1.5, 1.5}});
+    histos.add("hPt", ";#it{p}_{T} (GeV/#it{c})", kTH1F, {{100, 0., 5.}});
+    histos.add("hPhi", ";#phi (rad)", kTH1F, {{100, 0., 6.2831}});
     histos.add("hChargePos", ";z;", kTH1F, {{3, -1.5, 1.5}});
     histos.add("hChargeNeg", ";z;", kTH1F, {{3, -1.5, 1.5}});
-    histos.add("hInvariantMass", ";M_{k^{+}k^{-}} (GeV/#it{c}^{2});", kTH1F, {{100, 0., 2.}});
+    histos.add("hInvariantMass", ";M_{k^{+}k^{-}} (GeV/#it{c}^{2});", kTH1F, {{20, 1.0, 1.04}});
     histos.add("hdEdXvsMomentum", ";P_{K^{+}K^{-}}; dE/dx in TPC (keV/cm)", kTH2F, {{100, 0., 4.}, {200, 20., 400.}});
+    histos.add("hTOFBetavsMomentum", ";P_{K^{+}K^{-}}; TOF #beta", kTH2F, {{200, 0., 5.}, {250, 0.4, 1.1}});
   }
+
+  bool IsKaonNSigma(float mom, float nsigmaTPCK, float nsigmaTOFK)
+  {
+    bool fNsigmaTPCTOF = true;
+    double fNsigma = 3;
+    double fNsigma2 = 3;
+    if (fNsigmaTPCTOF) {
+      if (mom > 0.5) {
+        if (mom < 2.0) {
+          if (TMath::Hypot(nsigmaTOFK, nsigmaTPCK) < fNsigma)
+            return true;
+        } else if (TMath::Hypot(nsigmaTOFK, nsigmaTPCK) < fNsigma2)
+          return true;
+      } else {
+        if (TMath::Abs(nsigmaTPCK) < fNsigma)
+          return true;
+      }
+    } else {
+
+      if (mom < 0.4) {
+        if (nsigmaTOFK < -999.) {
+          if (TMath::Abs(nsigmaTPCK) < 2.0)
+            return true;
+        } else if (TMath::Abs(nsigmaTOFK) < 3.0 && TMath::Abs(nsigmaTPCK) < 3.0)
+          return true;
+      } else if (mom >= 0.4 && mom <= 0.6) {
+        if (nsigmaTOFK < -999.) {
+          if (TMath::Abs(nsigmaTPCK) < 2.0)
+            return true;
+        } else if (TMath::Abs(nsigmaTOFK) < 3.0 && TMath::Abs(nsigmaTPCK) < 3.0)
+          return true;
+      } else if (nsigmaTOFK < -999.) {
+        return false;
+      } else if (TMath::Abs(nsigmaTOFK) < 3.0 && TMath::Abs(nsigmaTPCK) < 3.0)
+        return true;
+    }
+    return false;
+ }
 
   void process(MyFilteredCollision const& coll, o2::aod::MyTracks const& tracks)
   {
@@ -96,21 +142,34 @@ struct KaonPidTask {
     auto groupNegative = negative->sliceByCached(aod::track::collisionId, coll.globalIndex());
     for (auto track : groupPositive) {
       histos.fill(HIST("hChargePos"), track.sign());
-      if (pidModel.get()->applyModelBoolean(track)) {
+      histos.fill(HIST("hEta"), track.eta());
+      histos.fill(HIST("hPt"), track.pt());
+      histos.fill(HIST("hPhi"), track.phi());
+      if ((cfgUseMLPID.value && pidModel.get()->applyModelBoolean(track)) ||
+      (!cfgUseMLPID.value && IsKaonNSigma(track.p(), track.tpcNSigmaKa(), track.tofNSigmaKa()))) {
         histos.fill(HIST("hdEdXvsMomentum"), track.p(), track.tpcSignal());
+        histos.fill(HIST("hTOFBetavsMomentum"), track.p(), track.beta());
       }
     }
 
     for (auto track : groupNegative) {
       histos.fill(HIST("hChargeNeg"), track.sign());
-      if (pidModel.get()->applyModelBoolean(track)) {
+      histos.fill(HIST("hEta"), track.eta());
+      histos.fill(HIST("hPt"), track.pt());
+      histos.fill(HIST("hPhi"), track.phi());
+      if ((cfgUseMLPID.value && pidModel.get()->applyModelBoolean(track)) ||
+      (!cfgUseMLPID.value && IsKaonNSigma(track.p(), track.tpcNSigmaKa(), track.tofNSigmaKa()))) {
         histos.fill(HIST("hdEdXvsMomentum"), track.p(), track.tpcSignal());
+        histos.fill(HIST("hTOFBetavsMomentum"), track.p(), track.beta());
       }
     }
 
     for (auto& [pos, neg] : combinations(soa::CombinationsFullIndexPolicy(groupPositive, groupNegative))) {
-      if (!(pidModel.get()->applyModelBoolean(pos)) || !(pidModel.get()->applyModelBoolean(neg))) {
+      if (cfgUseMLPID.value && (!(pidModel.get()->applyModelBoolean(pos)) || !(pidModel.get()->applyModelBoolean(neg)))) {
         continue;
+      }
+      if (!cfgUseMLPID.value && (!(IsKaonNSigma(pos.p(), pos.tpcNSigmaKa(), pos.tofNSigmaKa())) || !(IsKaonNSigma(neg.p(), neg.tpcNSigmaKa(), neg.tofNSigmaKa())))) {
+	continue;
       }
 
       TLorentzVector part1Vec;
