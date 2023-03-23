@@ -56,12 +56,12 @@ struct KaonPidTask {
   Configurable<std::string> cfgPathLocal{"local-path", ".", "base path to the local directory with ONNX models"};
   Configurable<std::string> cfgPathCCDB{"ccdb-path", "Users/m/mkabus/PIDML", "base path to the CCDB directory with ONNX models"};
   Configurable<std::string> cfgCCDBURL{"ccdb-url", "http://alice-ccdb.cern.ch", "URL of the CCDB repository"};
-  Configurable<int> cfgPid{"pid", 321, "PID to predict"};
-  Configurable<double> cfgCertainty{"certainty", 0.5, "Minimum certainty above which the model accepts a particular type of particle"};
+  Configurable<int> cfgPDG{"PDG", 321, "PDG to determine particle type"};
+  Configurable<double> cfgCertainty{"certainty", 0.9, "Minimum certainty above which the model accepts a particular type of particle"};
   Configurable<uint32_t> cfgDetector{"detector", kTPCTOFTRD, "What detectors to use: 0: TPC only, 1: TPC + TOF, 2: TPC + TOF + TRD"};
   Configurable<uint64_t> cfgTimestamp{"timestamp", 0, "Fixed timestamp"};
   Configurable<bool> cfgUseCCDB{"useCCDB", false, "Whether to autofetch ML model from CCDB. If false, local file will be used."};
-  Configurable<bool> cfgUseMLPID{"useMLPID", true, "Whether to use ML ONNX model for PID or the standard method"};
+  Configurable<bool> cfgUseML{"useML", true, "Whether to use ML ONNX model or the standard method"};
 
   o2::ccdb::CcdbApi ccdbApi;
 
@@ -84,8 +84,8 @@ struct KaonPidTask {
     if (cfgUseCCDB) {
       ccdbApi.init(cfgCCDBURL); // Initializes ccdbApi when cfgUseCCDB is set to 'true'
     }
-    if (cfgUseMLPID) {
-      pidModel = std::make_shared<PidONNXModel>(cfgPathLocal.value, cfgPathCCDB.value, cfgUseCCDB.value, ccdbApi, cfgTimestamp.value, cfgPid.value, static_cast<PidMLDetector>(cfgDetector.value), cfgCertainty.value);
+    if (cfgUseML) {
+      pidModel = std::make_shared<PidONNXModel>(cfgPathLocal.value, cfgPathCCDB.value, cfgUseCCDB.value, ccdbApi, cfgTimestamp.value, cfgPDG.value, static_cast<PidMLDetector>(cfgDetector.value), cfgCertainty.value);
     }
 
     histos.add("hEta", ";#eta", kTH1F, {{100, -1.5, 1.5}});
@@ -151,7 +151,7 @@ struct KaonPidTask {
        continue;
       }
       const auto mcParticle = track.mcParticle_as<aod::McParticles>();
-       if (mcParticle.pdgCode() == cfgPid.value) {  //condition for true MC
+       if (mcParticle.pdgCode() == cfgPDG.value) {  //condition for true MC
        	histos.fill(HIST("hPtTrueMC"), track.pt());
        } 
         else { 
@@ -163,9 +163,9 @@ struct KaonPidTask {
       histos.fill(HIST("hPt"), track.pt());
       histos.fill(HIST("hPhi"), track.phi());
       
-      if ((cfgUseMLPID.value && pidModel.get()->applyModelBoolean(track)) ||
-      (!cfgUseMLPID.value && IsKaonNSigma(track.p(), track.tpcNSigmaKa(), track.tofNSigmaKa()))) {
-	if (mcParticle.pdgCode() == cfgPid.value) {
+      if ((cfgUseML.value && pidModel.get()->applyModelBoolean(track)) ||
+      (!cfgUseML.value && IsKaonNSigma(track.p(), track.tpcNSigmaKa(), track.tofNSigmaKa()))) {
+	if (mcParticle.pdgCode() == cfgPDG.value) {
           histos.fill(HIST("hPtTrueML"), track.pt());  //condition for true positives
 	} 
 	else { 
@@ -176,7 +176,7 @@ struct KaonPidTask {
         histos.fill(HIST("hTOFBetavsMomentum"), track.p(), track.beta());
       }
        else { 
-	if (mcParticle.pdgCode() == cfgPid.value) {
+	if (mcParticle.pdgCode() == cfgPDG.value) {
         histos.fill(HIST("hPtFalseNeg"), track.pt());  //condition for false negatives
        }
      } 
@@ -187,7 +187,7 @@ struct KaonPidTask {
        continue;
       }
       const auto mcParticle = track.mcParticle_as<aod::McParticles>();
-       if (mcParticle.pdgCode() == cfgPid.value) {  //condition for true MC
+       if (mcParticle.pdgCode() == cfgPDG.value) {  //condition for true MC
        	histos.fill(HIST("hPtTrueMC"), track.pt());
        } 
         else { 
@@ -199,9 +199,9 @@ struct KaonPidTask {
       histos.fill(HIST("hPt"), track.pt());
       histos.fill(HIST("hPhi"), track.phi());
 
-      if ((cfgUseMLPID.value && pidModel.get()->applyModelBoolean(track)) ||
-      (!cfgUseMLPID.value && IsKaonNSigma(track.p(), track.tpcNSigmaKa(), track.tofNSigmaKa()))) {
-	if (mcParticle.pdgCode() == cfgPid.value) {
+      if ((cfgUseML.value && pidModel.get()->applyModelBoolean(track)) ||
+      (!cfgUseML.value && IsKaonNSigma(track.p(), track.tpcNSigmaKa(), track.tofNSigmaKa()))) {
+	if (mcParticle.pdgCode() == cfgPDG.value) {
           histos.fill(HIST("hPtTrueML"), track.pt());  //condition for true positives
 	} 
 	else { 
@@ -212,24 +212,24 @@ struct KaonPidTask {
         histos.fill(HIST("hTOFBetavsMomentum"), track.p(), track.beta());
       }
        else { 
-	if (mcParticle.pdgCode() == cfgPid.value) {
+	if (mcParticle.pdgCode() == cfgPDG.value) {
         histos.fill(HIST("hPtFalseNeg"), track.pt());  //condition for false negatives
     }
   }
 }
 
     for (auto& [pos, neg] : combinations(soa::CombinationsFullIndexPolicy(groupPositive, groupNegative))) {
-      if (cfgUseMLPID.value && (!(pidModel.get()->applyModelBoolean(pos)) || !(pidModel.get()->applyModelBoolean(neg)))) {
+      if (cfgUseML.value && (!(pidModel.get()->applyModelBoolean(pos)) || !(pidModel.get()->applyModelBoolean(neg)))) {
         continue;
       }
-      if (!cfgUseMLPID.value && (!(IsKaonNSigma(pos.p(), pos.tpcNSigmaKa(), pos.tofNSigmaKa())) || !(IsKaonNSigma(neg.p(), neg.tpcNSigmaKa(), neg.tofNSigmaKa())))) {
+      if (!cfgUseML.value && (!(IsKaonNSigma(pos.p(), pos.tpcNSigmaKa(), pos.tofNSigmaKa())) || !(IsKaonNSigma(neg.p(), neg.tpcNSigmaKa(), neg.tofNSigmaKa())))) {
 	continue;
       }
 
       TLorentzVector part1Vec;
       TLorentzVector part2Vec;
-      float mMassOne = TDatabasePDG::Instance()->GetParticle(cfgPid.value)->Mass();
-      float mMassTwo = TDatabasePDG::Instance()->GetParticle(cfgPid.value)->Mass();
+      float mMassOne = TDatabasePDG::Instance()->GetParticle(cfgPDG.value)->Mass();
+      float mMassTwo = TDatabasePDG::Instance()->GetParticle(cfgPDG.value)->Mass();
 
       part1Vec.SetPtEtaPhiM(pos.pt(), pos.eta(), pos.phi(), mMassOne);
       part2Vec.SetPtEtaPhiM(neg.pt(), neg.eta(), neg.phi(), mMassTwo);
