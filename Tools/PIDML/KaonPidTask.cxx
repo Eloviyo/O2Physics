@@ -37,8 +37,8 @@ using MyCollisions = soa::Join<aod::Collisions,
                                aod::EvSels,
                                aod::Mults>;
 using MyTracks = soa::Join<aod::FullTracks, aod::TracksExtra, aod::pidTOFbeta,
-                           aod::pidTPCKa, aod::pidTOFKa, aod::TOFSignal, 
-			   aod::TracksDCA>;
+                           aod::pidTPCKa, aod::pidTOFKa, aod::TOFSignal,
+			   aod::TracksDCA, aod::McTrackLabels, aod::TrackSelection>;
 using MyCollision = MyCollisions::iterator;
 using MyTrack = MyTracks::iterator;
 } // namespace o2::aod
@@ -95,7 +95,12 @@ struct KaonPidTask {
     histos.add("hChargeNeg", ";z;", kTH1F, {{3, -1.5, 1.5}});
     histos.add("hInvariantMass", ";M_{k^{+}k^{-}} (GeV/#it{c}^{2});", kTH1F, {{20, 1.0, 1.04}});
     histos.add("hdEdXvsMomentum", ";P_{K^{+}K^{-}}; dE/dx in TPC (keV/cm)", kTH2F, {{100, 0., 4.}, {200, 20., 400.}});
-    histos.add("hTOFBetavsMomentum", ";P_{K^{+}K^{-}}; TOF #beta", kTH2F, {{200, 0., 5.}, {250, 0.4, 1.1}});
+    histos.add("hTOFBetavsMomentum", ";P_{K^{+}K^{-}}; TOF #beta", kTH2F, {{200, 0., 5.}, {250, 0.4, 1.1}}); 
+    histos.add("hPtTrueMC", ";#it{p}_{T} (GeV/#it{c})", kTH1F, {{100, 0., 5.}});
+    histos.add("hPtFalseMC", ";#it{p}_{T} (GeV/#it{c})", kTH1F, {{100, 0., 5.}});
+    histos.add("hPtTrueML", ";#it{p}_{T} (GeV/#it{c})", kTH1F, {{100, 0., 5.}});
+    histos.add("hPtFalseML", ";#it{p}_{T} (GeV/#it{c})", kTH1F, {{100, 0., 5.}});
+    histos.add("hPtFalseNeg", ";#it{p}_{T} (GeV/#it{c})", kTH1F, {{100, 0., 5.}});
   }
 
   bool IsKaonNSigma(float mom, float nsigmaTPCK, float nsigmaTOFK)
@@ -136,33 +141,82 @@ struct KaonPidTask {
     return false;
  }
 
-  void process(MyFilteredCollision const& coll, o2::aod::MyTracks const& tracks)
+  void process(MyFilteredCollision const& coll, o2::aod::MyTracks const& tracks, o2::aod::McParticles const& mctracks)
   {
     auto groupPositive = positive->sliceByCached(aod::track::collisionId, coll.globalIndex());
     auto groupNegative = negative->sliceByCached(aod::track::collisionId, coll.globalIndex());
-    for (auto track : groupPositive) {
+    
+    for (const auto& track : groupPositive) {
+      if (!track.has_mcParticle()) {
+       continue;
+      }
+      const auto mcParticle = track.mcParticle_as<aod::McParticles>();
+       if (mcParticle.pdgCode() == cfgPid.value) {  //condition for true MC
+       	histos.fill(HIST("hPtTrueMC"), track.pt());
+       } 
+        else { 
+       	 histos.fill(HIST("hPtFalseMC"), track.pt());  //condition for false MC
+       }
+
       histos.fill(HIST("hChargePos"), track.sign());
       histos.fill(HIST("hEta"), track.eta());
       histos.fill(HIST("hPt"), track.pt());
       histos.fill(HIST("hPhi"), track.phi());
+      
       if ((cfgUseMLPID.value && pidModel.get()->applyModelBoolean(track)) ||
       (!cfgUseMLPID.value && IsKaonNSigma(track.p(), track.tpcNSigmaKa(), track.tofNSigmaKa()))) {
-        histos.fill(HIST("hdEdXvsMomentum"), track.p(), track.tpcSignal());
+	if (mcParticle.pdgCode() == cfgPid.value) {
+          histos.fill(HIST("hPtTrueML"), track.pt());  //condition for true positives
+	} 
+	else { 
+          histos.fill(HIST("hPtFalseML"), track.pt());  //condition for false positives
+        }
+
+	histos.fill(HIST("hdEdXvsMomentum"), track.p(), track.tpcSignal());
         histos.fill(HIST("hTOFBetavsMomentum"), track.p(), track.beta());
       }
-    }
+       else { 
+	if (mcParticle.pdgCode() == cfgPid.value) {
+        histos.fill(HIST("hPtFalseNeg"), track.pt());  //condition for false negatives
+       }
+     } 
+   }
 
     for (auto track : groupNegative) {
+      if (!track.has_mcParticle()) {
+       continue;
+      }
+      const auto mcParticle = track.mcParticle_as<aod::McParticles>();
+       if (mcParticle.pdgCode() == cfgPid.value) {  //condition for true MC
+       	histos.fill(HIST("hPtTrueMC"), track.pt());
+       } 
+        else { 
+       	 histos.fill(HIST("hPtFalseMC"), track.pt());  //condition for false MC
+       }
+
       histos.fill(HIST("hChargeNeg"), track.sign());
       histos.fill(HIST("hEta"), track.eta());
       histos.fill(HIST("hPt"), track.pt());
       histos.fill(HIST("hPhi"), track.phi());
+
       if ((cfgUseMLPID.value && pidModel.get()->applyModelBoolean(track)) ||
       (!cfgUseMLPID.value && IsKaonNSigma(track.p(), track.tpcNSigmaKa(), track.tofNSigmaKa()))) {
+	if (mcParticle.pdgCode() == cfgPid.value) {
+          histos.fill(HIST("hPtTrueML"), track.pt());  //condition for true positives
+	} 
+	else { 
+          histos.fill(HIST("hPtFalseML"), track.pt());  //condition for false positives
+        }
+
         histos.fill(HIST("hdEdXvsMomentum"), track.p(), track.tpcSignal());
         histos.fill(HIST("hTOFBetavsMomentum"), track.p(), track.beta());
       }
+       else { 
+	if (mcParticle.pdgCode() == cfgPid.value) {
+        histos.fill(HIST("hPtFalseNeg"), track.pt());  //condition for false negatives
     }
+  }
+}
 
     for (auto& [pos, neg] : combinations(soa::CombinationsFullIndexPolicy(groupPositive, groupNegative))) {
       if (cfgUseMLPID.value && (!(pidModel.get()->applyModelBoolean(pos)) || !(pidModel.get()->applyModelBoolean(neg)))) {
