@@ -44,6 +44,7 @@ using MyTrack = MyTracks::iterator;
 } // namespace o2::aod
 
 struct KaonPidTask {
+  SliceCache cache;
   std::shared_ptr<PidONNXModel> pidModel; // creates a shared pointer to a new instance 'pidmodel'.
   HistogramRegistry histos{"Histos", {}, OutputObjHandlingPolicy::AnalysisObject};
 
@@ -93,7 +94,8 @@ struct KaonPidTask {
     histos.add("hPhi", ";#phi (rad)", kTH1F, {{100, 0., 6.2831}});
     histos.add("hChargePos", ";z;", kTH1F, {{3, -1.5, 1.5}});
     histos.add("hChargeNeg", ";z;", kTH1F, {{3, -1.5, 1.5}});
-    histos.add("hInvariantMass", ";M_{k^{+}k^{-}} (GeV/#it{c}^{2});", kTH1F, {{20, 1.0, 1.04}});
+    histos.add("hNsigmaTPCK", ";#it{p}_{T} (GeV/#it{c}); n#sigma_{TPC}^{K}", kTH2F, {{35, 0.5, 4.}, {100, -5., 5.}});
+    histos.add("hInvariantMass", ";M_{k^{+}k^{-}} (GeV/#it{c}^{2});", kTH1F, {{20, 0.9, 1.2}});
     histos.add("hdEdXvsMomentum", ";P_{K^{+}K^{-}}; dE/dx in TPC (keV/cm)", kTH2F, {{100, 0., 4.}, {200, 20., 400.}});
     histos.add("hTOFBetavsMomentum", ";P_{K^{+}K^{-}}; TOF #beta", kTH2F, {{200, 0., 5.}, {250, 0.4, 1.1}}); 
     histos.add("hPtTrueMC", ";#it{p}_{T} (GeV/#it{c})", kTH1F, {{100, 0., 5.}});
@@ -143,8 +145,8 @@ struct KaonPidTask {
 
   void process(MyFilteredCollision const& coll, o2::aod::MyTracks const& tracks, o2::aod::McParticles const& mctracks)
   {
-    auto groupPositive = positive->sliceByCached(aod::track::collisionId, coll.globalIndex());
-    auto groupNegative = negative->sliceByCached(aod::track::collisionId, coll.globalIndex());
+    auto groupPositive = positive->sliceByCached(aod::track::collisionId, coll.globalIndex(), cache);
+    auto groupNegative = negative->sliceByCached(aod::track::collisionId, coll.globalIndex(), cache);
     
     for (const auto& track : groupPositive) {
       if (!track.has_mcParticle()) {
@@ -174,6 +176,7 @@ struct KaonPidTask {
 
 	histos.fill(HIST("hdEdXvsMomentum"), track.p(), track.tpcSignal());
         histos.fill(HIST("hTOFBetavsMomentum"), track.p(), track.beta());
+        histos.fill(HIST("hNsigmaTPCK"), track.pt(), track.tpcNSigmaKa());
       }
        else { 
 	if (mcParticle.pdgCode() == cfgPDG.value) {
@@ -209,6 +212,7 @@ struct KaonPidTask {
         }
 
         histos.fill(HIST("hdEdXvsMomentum"), track.p(), track.tpcSignal());
+        histos.fill(HIST("hNsigmaTPCK"), track.pt(), track.tpcNSigmaKa());
         histos.fill(HIST("hTOFBetavsMomentum"), track.p(), track.beta());
       }
        else { 
