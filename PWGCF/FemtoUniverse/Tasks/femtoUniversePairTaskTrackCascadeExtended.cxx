@@ -315,7 +315,7 @@ struct femtoUniversePairTaskTrackCascadeExtended {
       if (!pairCleaner.isCleanPair(p1, p2, parts)) {
         continue;
       }
-      
+
       // const auto& posChild = parts.iteratorAt(p2.index() - 3);
       // const auto& negChild = parts.iteratorAt(p2.index() - 2);
       // const auto& bachelor = parts.iteratorAt(p2.index() - 1);
