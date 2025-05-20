@@ -173,7 +173,7 @@ struct Filter2Prong {
     if (cfcollisions.size() <= 0 || cftracks.size() <= 0)
       return; // rejected collision
     for (const auto& cftrack1 : cftracks) {
-      const auto &p1 = tracks.iteratorAt(cftrack1.trackId()-tracks.begin().globalIndex());
+      const auto& p1 = tracks.iteratorAt(cftrack1.trackId() - tracks.begin().globalIndex());
       if (p1.sign() != 1)
         continue;
       if (sigmaFormula->Eval(o2::aod::pidutils::tpcNSigma(cfgImPart1PID, p1), o2::aod::pidutils::tofNSigma(cfgImPart1PID, p1)) <= 0.0f)
@@ -181,7 +181,7 @@ struct Filter2Prong {
       for (const auto& cftrack2 : cftracks) {
         if (cftrack2.globalIndex() == cftrack1.globalIndex())
           continue;
-        const auto &p2 = tracks.iteratorAt(cftrack2.trackId()-tracks.begin().globalIndex());
+        const auto& p2 = tracks.iteratorAt(cftrack2.trackId() - tracks.begin().globalIndex());
         if (p2.sign() != -1)
           continue;
         if (sigmaFormula->Eval(o2::aod::pidutils::tpcNSigma(cfgImPart2PID, p2), o2::aod::pidutils::tofNSigma(cfgImPart2PID, p2)) <= 0.0f)
